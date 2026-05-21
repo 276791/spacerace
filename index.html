@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Platformer - Space Race</title>
+<style>
+    body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif; }
+    canvas { background: white; border: 2px solid #333; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="800" height="500"></canvas>
+
+<script>
+// ====================== CONFIG ======================
+const WIDTH = 800;
+const HEIGHT = 500;
+const GROUND_Y = 400;
+const FINISH_X = 720;
+
+// ====================== GAME STATE ======================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+let playerX = 60;
+let playerY = GROUND_Y - 40;
+let velocityX = 0;
+let velocityY = 0;
+let onGround = true;
+
+let leftPressed = false;
+let rightPressed = false;
+let jumpPressed = false;
+
+const GRAVITY = 0.5;
+const JUMP_FORCE = -12;
+const MOVE_SPEED = 4;
+const FRICTION = 0.8;
+
+// Text system
+let currentText = "";
+let showText = false;
+let nextTextAfterFinish = "";
+let finishLabel = "FINISH";
+let isUSAMode = true;
+let isSecondStage = false;
+
+// Objects
+const platforms = [];
+const killBlocks = [];
+
+// Content
+const usa = `The US were in a fight towards advancements into the mysteries of space.
+The US lost most of the firsts for their country.
+However, the US did something so advanced that we havent done it since.
+The US won by putting the first man/men on the moon on July 20th, 1969 during
+the Apollo 11 mission. In total, the Apollo missions costed over $25 billion.`;
+
+const ussr = `The USSR (also known as the Soviet Union) won in most of the firsts
+when it comes to space advancements. The Soviet Union put not only the first
+national satellite into orbit but also put the first man in orbit.`;
+
+const yury = `The USSR were the first to put the first man into orbit,
+his name was Yuri Gagarin. Sergei Krikalev was also sent into
+orbit in May 1991. Unlike Gagarin, Krikalev wasn’t so lucky. He is known as
+the last Soviet citizen and was stuck in space for nearly 2 years after the
+USSR disbanded. He suffered huge psychological trauma.`;
+
+const alan = `Alan Shepard was the first American in space.
+He flew aboard Freedom 7 on May 5, 1961, as part of Project Mercury.`;
+
+// ====================== CREATE LEVEL ======================
+function createParkour() {
+    platforms.length = 0;
+    killBlocks.length = 0;
+
+    platforms.push({x: 150, y: 320, w: 120, h: 15});
+    platforms.push({x: 320, y: 250, w: 100, h: 15});
+    platforms.push({x: 480, y: 300, w: 80, h: 15});
+
+    killBlocks.push({x: 200, y: 380, w: 500, h: 20});
+    killBlocks.push({x: 380, y: 200, w: 50, h: 20});
+    killBlocks.push({x: 550, y: 280, w: 70, h: 20});
+}
+
+// ====================== INPUT ======================
+window.addEventListener('keydown', e => {
+    switch(e.key) {
+        case 'ArrowLeft':
+        case 'a':
+        case 'A': leftPressed = true; break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D': rightPressed = true; break;
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+        case ' ': jumpPressed = true; break;
+
+        case '1':
+            isUSAMode = true;
+            isSecondStage = false;
+            currentText = usa;
+            nextTextAfterFinish = alan;
+            finishLabel = "ALAN";
+            showText = true;
+            resetToStart();
+            break;
+
+        case '2':
+            isUSAMode = false;
+            isSecondStage = false;
+            currentText = ussr;
+            nextTextAfterFinish = yury;
+            finishLabel = "YURY";
+            showText = true;
+            resetToStart();
+            break;
+    }
+});
+
+window.addEventListener('keyup', e => {
+    switch(e.key) {
+        case 'ArrowLeft':
+        case 'a':
+        case 'A': leftPressed = false; break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D': rightPressed = false; break;
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+        case ' ': jumpPressed = false; break;
+    }
+});
+
+// ====================== GAME LOGIC ======================
+function update() {
+    // Horizontal movement
+    if (leftPressed) velocityX = -MOVE_SPEED;
+    else if (rightPressed) velocityX = MOVE_SPEED;
+    else velocityX *= FRICTION;
+
+    // Jump
+    if (jumpPressed && onGround) {
+        velocityY = JUMP_FORCE;
+        onGround = false;
+    }
+
+    velocityY += GRAVITY;
+    playerX += velocityX;
+    playerY += velocityY;
+
+    onGround = false;
+
+    const playerRect = {x: playerX, y: playerY, w: 30, h: 40};
+
+    // Ground
+    if (playerY >= GROUND_Y - 40) {
+        playerY = GROUND_Y - 40;
+        velocityY = 0;
+        onGround = true;
+    }
+
+    // Platforms
+    for (let p of platforms) {
+        if (rectIntersect(playerRect, p) && velocityY >= 0) {
+            playerY = p.y - 40;
+            velocityY = 0;
+            onGround = true;
+            break;
+        }
+    }
+
+    // Boundaries
+    if (playerX < 0) playerX = 0;
+    if (playerX > WIDTH - 30) playerX = WIDTH - 30;
+
+    // Kill blocks
+    for (let k of killBlocks) {
+        if (rectIntersect(playerRect, k)) {
+            resetToStart();
+            return;
+        }
+    }
+
+    // Finish line
+    if (playerX + 30 >= FINISH_X) {
+        triggerFinish();
+        resetToStart();
+    }
+}
+
+function rectIntersect(a, b) {
+    return a.x < b.x + b.w &&
+           a.x + a.w > b.x &&
+           a.y < b.y + b.h &&
+           a.y + a.h > b.y;
+}
+
+function triggerFinish() {
+    if (!isSecondStage) {
+        currentText = nextTextAfterFinish;
+        finishLabel = "HOME";
+        isSecondStage = true;
+        showText = true;
+    } else {
+        currentText = isUSAMode ? usa : ussr;
+        finishLabel = isUSAMode ? "ALAN" : "YURY";
+        isSecondStage = false;
+        showText = false;
+    }
+}
+
+function resetToStart() {
+    playerX = 60;
+    playerY = GROUND_Y - 40;
+    velocityX = 0;
+    velocityY = 0;
+    onGround = true;
+}
+
+// ====================== RENDERING ======================
+function drawMultilineString(g, text, x, y) {
+    const lines = text.split('\n');
+    const lineHeight = 22; // approximate for 18px font
+    for (let i = 0; i < lines.length; i++) {
+        g.fillText(lines[i], x, y + i * lineHeight);
+    }
+}
+
+function render() {
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+    // Ground
+    ctx.strokeStyle = '#3c3c3c';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    ctx.lineTo(WIDTH, GROUND_Y);
+    ctx.stroke();
+
+    // Platforms
+    ctx.fillStyle = '#5a5a5a';
+    for (let p of platforms) {
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+    }
+
+    // Kill Blocks
+    ctx.fillStyle = '#b40000';
+    for (let k of killBlocks) {
+        ctx.fillRect(k.x, k.y, k.w, k.h);
+    }
+
+    // Finish line
+    ctx.strokeStyle = '#dc3232';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(FINISH_X, GROUND_Y - 80);
+    ctx.lineTo(FINISH_X, GROUND_Y);
+    ctx.stroke();
+
+    ctx.fillStyle = '#dc3232';
+    ctx.font = 'bold 14px sans-serif';
+    const labelWidth = ctx.measureText(finishLabel).width;
+    ctx.fillText(finishLabel, FINISH_X - labelWidth/2 - 5, GROUND_Y - 90);
+
+    // Player
+    ctx.fillStyle = '#3278dc';
+    ctx.beginPath();
+    ctx.roundRect(playerX, playerY, 30, 40, 8);
+    ctx.fill();
+
+    // Instructions
+    ctx.fillStyle = '#333';
+    ctx.font = '12px sans-serif';
+    ctx.fillText("Arrow keys / WASD to move | Up / W / Space to jump", 10, 25);
+    ctx.fillText("Press 1: USA Cycle | 2: USSR Cycle", 10, 45);
+
+    // Main text
+    if (showText && currentText) {
+        ctx.fillStyle = '#000';
+        ctx.font = '18px "Times New Roman", serif';
+        drawMultilineString(ctx, currentText, 20, 80);
+    }
+}
+
+// ====================== GAME LOOP ======================
+function gameLoop() {
+    update();
+    render();
+    requestAnimationFrame(gameLoop);
+}
+
+// ====================== START ======================
+createParkour();
+gameLoop();
+</script>
+
+</body>
+</html>
